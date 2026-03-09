@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "skill-vetter": {
+      "source": "useai-pro/openclaw-skills-security",
+      "sourceType": "github",
+      "computedHash": "4fbf573bbcb8f6005a7d80b66b9fd2d531ec17601ea30168031f7cc834f15def"
+    }
+  }
+}
