@@ -109,7 +109,7 @@ python scripts/chrome_launcher.py
 # 2. 检查登录状态
 python scripts/cli.py check-login
 
-# 3. 登录（如需要）
+# 3. 登录，只使用扫码登录（如需要）
 python scripts/cli.py login
 
 # 4. 搜索笔记

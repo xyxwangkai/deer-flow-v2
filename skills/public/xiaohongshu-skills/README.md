@@ -109,7 +109,7 @@ python scripts/chrome_launcher.py --headless
 # 检查登录状态（已登录时返回用户昵称和小红书号）
 python scripts/cli.py check-login
 
-# 扫码登录
+# 扫码登录（第二次只使用扫码方式，禁用验证码）
 python scripts/cli.py login
 ```
 

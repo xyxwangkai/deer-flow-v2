@@ -15,6 +15,12 @@ import os
 import sys
 import tempfile
 
+# 导入图片生成命令
+from xhs_image_generator.command import (
+    cmd_generate_images,
+    cmd_generate_for_publish,
+)
+
 def _session_tab_file(port: int) -> str:
     """返回指定端口的 session tab 文件路径（每账号独立隔离）。"""
     return os.path.join(tempfile.gettempdir(), "xhs", f"session_tab_{port}.txt")
@@ -739,48 +745,81 @@ def cmd_favorite_feed(args: argparse.Namespace) -> None:
 
 def cmd_publish(args: argparse.Namespace) -> None:
     """发布图文内容。"""
-    from image_downloader import process_images
-    from xhs.login import check_login_status
-    from xhs.publish import publish_image_content
-    from xhs.types import PublishImageContent
+    # 如果启用了图片生成，使用publish_pipeline流程
+    if getattr(args, "generate_images", False):
+        from publish_pipeline import run_publish_pipeline
+        
+        # 读取标题和正文
+        with open(args.title_file, encoding="utf-8") as f:
+            title = f.read().strip()
+        with open(args.content_file, encoding="utf-8") as f:
+            content = f.read().strip()
+        
+        result = run_publish_pipeline(
+            title=title,
+            content=content,
+            images=args.images,
+            video=None,
+            tags=args.tags,
+            schedule_time=args.schedule_at,
+            is_original=args.original,
+            visibility=args.visibility or "",
+            host=args.host,
+            port=args.port,
+            account=args.account,
+            headless=args.headless,
+            generate_images=args.generate_images,
+            image_style=args.image_style,
+            image_layout=args.image_layout,
+            image_preset=args.image_preset,
+            image_count=args.image_count,
+        )
+        
+        _output(result, exit_code=result.get("exit_code", 0 if result["success"] else 2))
+    else:
+        # 原有流程：使用现有图片
+        from image_downloader import process_images
+        from xhs.login import check_login_status
+        from xhs.publish import publish_image_content
+        from xhs.types import PublishImageContent
 
-    # 读取标题和正文
-    with open(args.title_file, encoding="utf-8") as f:
-        title = f.read().strip()
-    with open(args.content_file, encoding="utf-8") as f:
-        content = f.read().strip()
+        # 读取标题和正文
+        with open(args.title_file, encoding="utf-8") as f:
+            title = f.read().strip()
+        with open(args.content_file, encoding="utf-8") as f:
+            content = f.read().strip()
 
-    # 处理图片
-    image_paths = process_images(args.images) if args.images else []
-    if not image_paths:
-        _output({"success": False, "error": "没有有效的图片"}, exit_code=2)
+        # 处理图片
+        image_paths = process_images(args.images) if args.images else []
+        if not image_paths:
+            _output({"success": False, "error": "没有有效的图片"}, exit_code=2)
 
-    browser, page = _connect(args)
-    try:
-        # headless 模式登录检查 + 自动降级
-        headless = getattr(args, "headless", False)
-        if headless and not check_login_status(page):
+        browser, page = _connect(args)
+        try:
+            # headless 模式登录检查 + 自动降级
+            headless = getattr(args, "headless", False)
+            if headless and not check_login_status(page):
+                browser.close_page(page)
+                browser.close()
+                _headless_fallback(args.port)
+                return
+
+            publish_image_content(
+                page,
+                PublishImageContent(
+                    title=title,
+                    content=content,
+                    tags=args.tags or [],
+                    image_paths=image_paths,
+                    schedule_time=args.schedule_at,
+                    is_original=args.original,
+                    visibility=args.visibility or "",
+                ),
+            )
+            _output({"success": True, "title": title, "images": len(image_paths), "status": "发布完成"})
+        finally:
             browser.close_page(page)
             browser.close()
-            _headless_fallback(args.port)
-            return
-
-        publish_image_content(
-            page,
-            PublishImageContent(
-                title=title,
-                content=content,
-                tags=args.tags or [],
-                image_paths=image_paths,
-                schedule_time=args.schedule_at,
-                is_original=args.original,
-                visibility=args.visibility or "",
-            ),
-        )
-        _output({"success": True, "title": title, "images": len(image_paths), "status": "发布完成"})
-    finally:
-        browser.close_page(page)
-        browser.close()
 
 
 def cmd_fill_publish(args: argparse.Namespace) -> None:
@@ -1157,12 +1196,18 @@ def build_parser() -> argparse.ArgumentParser:
     sub = subparsers.add_parser("publish", help="发布图文")
     sub.add_argument("--title-file", required=True, help="标题文件路径")
     sub.add_argument("--content-file", required=True, help="正文文件路径")
-    sub.add_argument("--images", nargs="+", required=True, help="图片路径/URL")
+    sub.add_argument("--images", nargs="+", help="图片路径/URL（可选，如果使用--generate-images则不需要）")
     sub.add_argument("--tags", nargs="*", help="标签")
     sub.add_argument("--schedule-at", help="定时发布 (ISO8601)")
     sub.add_argument("--original", action="store_true", help="声明原创")
     sub.add_argument("--visibility", help="可见范围")
     sub.add_argument("--headless", action="store_true", help="无头模式（未登录自动降级）")
+    # 图片生成参数
+    sub.add_argument("--generate-images", action="store_true", help="自动生成图片")
+    sub.add_argument("--image-style", help="图片风格（cute, fresh, warm, bold, minimal, retro, pop, notion, chalkboard, study-notes, screen-print）")
+    sub.add_argument("--image-layout", help="图片布局（sparse, balanced, dense, list, comparison, flow, mindmap, quadrant）")
+    sub.add_argument("--image-preset", help="图片预设（knowledge-card, checklist, tutorial, poster, cinematic, etc.）")
+    sub.add_argument("--image-count", type=int, default=3, help="图片数量（2-10）")
     sub.set_defaults(func=cmd_publish)
 
     # publish-video
@@ -1241,6 +1286,26 @@ def build_parser() -> argparse.ArgumentParser:
     sub = subparsers.add_parser("set-default-account", help="设置默认账号")
     sub.add_argument("--name", required=True, help="账号名称")
     sub.set_defaults(func=cmd_set_default_account)
+
+    # generate-images（生成小红书信息图）
+    sub = subparsers.add_parser("generate-images", help="生成小红书信息图系列")
+    sub.add_argument("--content-file", required=True, help="内容文件路径")
+    sub.add_argument("--title", help="标题")
+    sub.add_argument("--style", help="视觉风格")
+    sub.add_argument("--layout", help="布局")
+    sub.add_argument("--preset", help="预设")
+    sub.add_argument("--image-count", type=int, help="图片数量")
+    sub.add_argument("--output-dir", help="输出目录")
+    sub.set_defaults(func=cmd_generate_images)
+
+    # generate-for-publish（为发布生成图片）
+    sub = subparsers.add_parser("generate-for-publish", help="为发布流程生成图片")
+    sub.add_argument("--title-file", required=True, help="标题文件路径")
+    sub.add_argument("--content-file", required=True, help="内容文件路径")
+    sub.add_argument("--style", default="cute", help="视觉风格")
+    sub.add_argument("--layout", default="balanced", help="布局")
+    sub.add_argument("--image-count", type=int, default=3, help="图片数量")
+    sub.set_defaults(func=cmd_generate_for_publish)
 
     return parser
 
