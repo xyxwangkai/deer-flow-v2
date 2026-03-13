@@ -54,4 +54,4 @@ web/
 .claude
 *.log
 
-skills/public/baoyu-post-to-wechat/config/*.json
+skills/public/baoyu-post-to-wechat/config/api_credentials.json

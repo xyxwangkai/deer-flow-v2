@@ -67,12 +67,16 @@ export function WorkspaceNavMenu() {
     try {
       const response = await fetch("/api/auth/logout", {
         method: "POST",
+        credentials: "include", // 确保包含cookie
       });
 
       if (response.ok) {
         toast.success("已登出");
-        router.push("/login");
-        router.refresh();
+        // 强制刷新页面确保cookie被清除
+        setTimeout(() => {
+          router.push("/login");
+          router.refresh();
+        }, 100);
       } else {
         toast.error("登出失败");
       }
