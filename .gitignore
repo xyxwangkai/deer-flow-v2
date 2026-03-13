@@ -53,3 +53,5 @@ web/
 .agents
 .claude
 *.log
+
+skills/public/baoyu-post-to-wechat/config/*.json

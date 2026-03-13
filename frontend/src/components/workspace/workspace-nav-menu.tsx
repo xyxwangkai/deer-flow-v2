@@ -5,11 +5,14 @@ import {
   ChevronsUpDown,
   GlobeIcon,
   InfoIcon,
+  LogOutIcon,
   MailIcon,
   Settings2Icon,
   SettingsIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import {
   DropdownMenu,
@@ -58,6 +61,25 @@ export function WorkspaceNavMenu() {
   const [mounted, setMounted] = useState(false);
   const { open: isSidebarOpen } = useSidebar();
   const { t } = useI18n();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        toast.success("已登出");
+        router.push("/login");
+        router.refresh();
+      } else {
+        toast.error("登出失败");
+      }
+    } catch (error) {
+      toast.error("网络错误，请重试");
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -145,6 +167,11 @@ export function WorkspaceNavMenu() {
                 >
                   <InfoIcon />
                   {t.workspace.about}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOutIcon />
+                  登出
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

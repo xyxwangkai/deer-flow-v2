@@ -17,6 +17,9 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
+    // 登录认证配置
+    LOGIN_USERNAME: z.string().default("admin"),
+    LOGIN_PASSWORD: z.string().default("password"),
   },
 
   /**
@@ -28,6 +31,8 @@ export const env = createEnv({
     NEXT_PUBLIC_BACKEND_BASE_URL: z.string().optional(),
     NEXT_PUBLIC_LANGGRAPH_BASE_URL: z.string().optional(),
     NEXT_PUBLIC_STATIC_WEBSITE_ONLY: z.string().optional(),
+    // 前端基础URL配置，用于nginx代理环境
+    NEXT_PUBLIC_BASE_URL: z.string().default("http://localhost:2026"),
   },
 
   /**
@@ -46,6 +51,13 @@ export const env = createEnv({
     NEXT_PUBLIC_STATIC_WEBSITE_ONLY:
       process.env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY,
     GITHUB_OAUTH_TOKEN: process.env.GITHUB_OAUTH_TOKEN,
+    
+    // 登录认证配置
+    LOGIN_USERNAME: process.env.LOGIN_USERNAME,
+    LOGIN_PASSWORD: process.env.LOGIN_PASSWORD,
+    
+    // 前端基础URL配置
+    NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
