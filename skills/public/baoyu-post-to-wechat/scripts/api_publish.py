@@ -18,11 +18,28 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 def load_config(config_file: str = "config/api_credentials.json") -> Dict[str, Any]:
-    """加载API配置"""
+    """加载API配置，优先使用环境变量"""
+    config = {}
+    
+    # 优先从环境变量读取
+    app_id = os.getenv("WECHAT_APP_ID")
+    app_secret = os.getenv("WECHAT_APP_SECRET")
+    access_token = os.getenv("WECHAT_ACCESS_TOKEN")
+    
+    if app_id and app_secret:
+        config["app_id"] = app_id
+        config["app_secret"] = app_secret
+        if access_token:
+            config["access_token"] = access_token
+        print("使用环境变量配置")
+        return config
+    
+    # 如果环境变量不存在，回退到配置文件
     config_path = project_root / config_file
     if not config_path.exists():
-        print(f"错误: 配置文件不存在: {config_path}")
-        print("请创建配置文件，包含以下字段:")
+        print(f"错误: 配置文件不存在且环境变量未设置: {config_path}")
+        print("请设置环境变量 WECHAT_APP_ID 和 WECHAT_APP_SECRET")
+        print("或者创建配置文件，包含以下字段:")
         print(json.dumps({
             "app_id": "YOUR_APP_ID",
             "app_secret": "YOUR_APP_SECRET",
@@ -31,6 +48,7 @@ def load_config(config_file: str = "config/api_credentials.json") -> Dict[str, A
         sys.exit(1)
     
     with open(config_path, 'r', encoding='utf-8') as f:
+        print("使用配置文件")
         return json.load(f)
 
 def get_access_token(app_id: str, app_secret: str) -> str:
@@ -78,6 +96,30 @@ def upload_image(access_token: str, image_path: str) -> Optional[str]:
                 return None
     except Exception as e:
         print(f"上传图片时出错: {e}")
+        return None
+
+def upload_cover_image_to_material(access_token: str, image_path: str) -> Optional[str]:
+    """上传封面图片到素材库并返回media_id"""
+    if not os.path.exists(image_path):
+        print(f"封面图片文件不存在: {image_path}")
+        return None
+    
+    url = f"https://api.weixin.qq.com/cgi-bin/material/add_material?access_token={access_token}&type=image"
+    
+    try:
+        with open(image_path, 'rb') as f:
+            files = {'media': f}
+            response = requests.post(url, files=files, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            if data.get("media_id"):
+                return data["media_id"]
+            else:
+                print(f"上传封面图片到素材库失败: {data}")
+                return None
+    except Exception as e:
+        print(f"上传封面图片到素材库时出错: {e}")
         return None
 
 def create_draft(access_token: str, title: str, content: str, 
@@ -146,6 +188,23 @@ def read_content_file(file_path: str) -> str:
         print(f"读取文件时出错: {e}")
         sys.exit(1)
 
+def save_access_token_to_config(access_token: str, config_file: str = "config/api_credentials.json"):
+    """将access_token保存到配置文件"""
+    config_path = project_root / config_file
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        config["access_token"] = access_token
+        config["access_token_timestamp"] = int(time.time())
+        
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        
+        print("access_token已保存到配置文件")
+    except Exception as e:
+        print(f"保存access_token时出错: {e}")
+
 def main():
     parser = argparse.ArgumentParser(description="微信公众号API发布工具")
     parser.add_argument("--title", required=True, help="文章标题")
@@ -182,23 +241,23 @@ def main():
     
     # 获取access_token（如果配置中没有）
     access_token = config.get("access_token")
-    if not access_token:
-        app_id = config.get("app_id")
-        app_secret = config.get("app_secret")
-        if not app_id or not app_secret:
-            print("错误: 配置文件中缺少app_id和app_secret")
-            sys.exit(1)
-        access_token = get_access_token(app_id, app_secret)
-    
+    app_id = config.get("app_id")
+    app_secret = config.get("app_secret")
+    if not app_id or not app_secret:
+        print("错误: 配置文件中缺少app_id和app_secret")
+        sys.exit(1)
+    access_token = get_access_token(app_id, app_secret)
+        
     # 上传封面图片
     cover_media_id = ""
     if args.cover:
-        print(f"上传封面图片: {args.cover}")
-        image_url = upload_image(access_token, args.cover)
-        if image_url:
-            print(f"封面图片上传成功: {image_url}")
-            # 注意：这里需要进一步处理获取media_id
-            # 简化处理，实际需要调用素材管理接口
+        # 简化处理，实际需要调用素材管理接口
+        # 补充：上传封面图片到素材库并获取media_id
+        cover_media_id = upload_cover_image_to_material(access_token, args.cover)
+        if cover_media_id:
+            print(f"封面图片素材ID: {cover_media_id}")
+        else:
+            print("警告: 封面图片上传到素材库失败，将使用默认封面")            
     
     # 设置评论参数
     need_open_comment = 1
@@ -221,7 +280,7 @@ def main():
         only_fans_can_comment=only_fans_can_comment
     )
     
-    if result.get("errcode") == 0:
+    if result.get("media_id") != "":
         media_id = result.get("media_id")
         print(f"草稿创建成功! media_id: {media_id}")
         
